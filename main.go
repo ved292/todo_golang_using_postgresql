@@ -2,24 +2,16 @@ package main
 
 import (
 	"log"
-	"main/dbConn"
-	"main/routes"
+	"main/api"
 	"net/http"
+	"main/api/service/repo"
 	_ "github.com/lib/pq"
 )
 
 func main(){
-	db:= dbconn.ConnToDb()
-	routes.DB = db
+	db:= repo.ConnToDb()
 	defer db.Close()
-
-	http.HandleFunc("/post",routes.CreateEntry)
-
-	http.HandleFunc("/",routes.GetEntries)
-
-	http.HandleFunc("/put/",routes.UpdateEntries)
-
-	http.HandleFunc("/delete/",routes.DeleteEntries)
+	api.Route()
 	
 	log.Fatal(http.ListenAndServe(":8000",nil))
 }
