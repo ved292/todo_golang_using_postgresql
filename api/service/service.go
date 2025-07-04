@@ -1,5 +1,4 @@
-package routes
-
+package service
 import (
 	"bytes"
 	"database/sql"
@@ -7,7 +6,7 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"main/sqlqueries"
+	"main/api/service/repo"
 	"net/http"
 	"strconv"
 	"strings"
@@ -19,11 +18,12 @@ var DB *sql.DB
 func CreateEntry(w http.ResponseWriter,r *http.Request){
 	body,err:= io.ReadAll(r.Body)
 	checkErr(err)
-	todo:=sqlqueries.Todo{}
+	todo:=repo.Todo{}
 	err = json.NewDecoder(bytes.NewBuffer(body)).Decode(&todo)
 	checkErr(err)
-	pk:=sqlqueries.InsertIntoTable(DB,todo)
-	fmt.Println(pk)
+	repo.InsertIntoTable(todo)
+	// fmt.Println(pk)
+	w.Write([]byte("Entry Posted"))
 }
 
 // This function is used to create a DB table
@@ -40,7 +40,7 @@ func createTable(db *sql.DB){
 
 // This function will fetch all the entries from the table
 func GetEntries(w http.ResponseWriter,r *http.Request){
-	list:=sqlqueries.PrintTable(DB)
+	list:=repo.PrintTable()
 	w.Header().Set("Content-Type","application/json")
 	err := json.NewEncoder(w).Encode(list)
 	if err!=nil{
@@ -52,7 +52,7 @@ func GetEntries(w http.ResponseWriter,r *http.Request){
 // This function will update the row
 func UpdateEntries(w http.ResponseWriter,r *http.Request){
 	body,_ := io.ReadAll(r.Body)
-	todo:= sqlqueries.Todo{}
+	todo:= repo.Todo{}
 	err := json.NewDecoder(bytes.NewReader(body)).Decode(&todo)
 	if err!=nil{
 		fmt.Println("error")
@@ -65,7 +65,13 @@ func UpdateEntries(w http.ResponseWriter,r *http.Request){
 		return
 	}
 	id,_:= strconv.Atoi(parts[2])
-	sqlqueries.UpdateTable(DB,id,todo)
+	rowsAffected:=repo.UpdateTable(id,todo)
+	if rowsAffected == 0 {
+		w.Write([]byte("Entry not found"))
+	} else {
+		w.Write([]byte("Entry Updated"))
+	}
+	
 }
 
 // This function will delete the row 
@@ -77,7 +83,13 @@ func DeleteEntries(w http.ResponseWriter,r *http.Request){
 		return
 	}
 	id,_:= strconv.Atoi(parts[2])
-	sqlqueries.DeleteEntry(DB,id)
+	rowsAffected:=repo.DeleteEntry(id)
+	if rowsAffected == 0 {
+		w.Write([]byte("Entry not found"))
+	} else {
+		w.Write([]byte("Entry Deleted"))
+	}
+	
 }
 
 func checkErr(err error){
