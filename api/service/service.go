@@ -30,7 +30,6 @@ func Create(w http.ResponseWriter,r *http.Request){
 		http.Error(w,"Unable to query from the database",http.StatusInternalServerError)
 		return
 	}
-	// fmt.Println(pk)
 	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte("Entry Posted"))
 }
@@ -54,6 +53,7 @@ func Get(w http.ResponseWriter,r *http.Request){
 		return
 	}
 }
+
 
 // This function will update the row
 func Update(w http.ResponseWriter,r *http.Request){
@@ -92,6 +92,7 @@ func Update(w http.ResponseWriter,r *http.Request){
 	}
 
 }
+
 
 // This function will delete the row 
 func Delete(w http.ResponseWriter,r *http.Request){

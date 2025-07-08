@@ -12,7 +12,7 @@ func Route(){
 	
 	r.HandleFunc("/",service.Get).Methods("GET")
 
-	r.HandleFunc("/{id}",service.Update).Methods("PUT")
+	r.HandleFunc("/{id}",service.Update).Methods("PATCH")
 
 	r.HandleFunc("/{id}",service.Delete).Methods("DELETE")
 

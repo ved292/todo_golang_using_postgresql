@@ -5,15 +5,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
 )
 
+// The pointer helps to find the client send which fields
 type Todo struct{
-	Id int `json:"id,omitempty"`
-	Title string `json:"title"`
-	Description string `json:"description"`
+	Id *int `json:"id,omitempty"`
+	Title *string `json:"title,omitempty"`
+	Description *string `json:"description,omitempty"`
+	IsDeleted *bool `json:"is_deleted,omitempty"`
 }
 
 
@@ -23,6 +26,7 @@ const (
 	user = "postgres"
 	dbname = "todos"
 )
+
 var db *sql.DB
 func ConnToDb()(error){
 	var err error
@@ -50,22 +54,25 @@ func CloseDB() {
 	}
 }
 
+
 // This function is used to create a DB table
 func createTable(db *sql.DB){
-	query := `CREATE TABLE IF NOT EXISTS todos (
+	query := `CREATE TABLE IF NOT EXISTS todo (
 		id SERIAL PRIMARY KEY,
 		title VARCHAR(255) NOT NULL,
-		description VARCHAR(255)
+		description VARCHAR(255),
+		is_deleted BOOLEAN
 	)`
 	_,err :=db.Exec(query) 
 	checkErr(err)
 	fmt.Println("Table successfully created")
 }
 
+
 // This function will insert into the DB table
 func Create(todo Todo) (int,error){
-	query := `INSERT INTO todos (title,description)
-	VALUES ($1,$2) RETURNING id`
+	query := `INSERT INTO todo (title,description,is_deleted)
+	VALUES ($1,$2,false) RETURNING id`
 	var pk int
 	// fmt.Println(todo.Name)
 	err :=db.QueryRow(query, todo.Title,todo.Description).Scan(&pk)
@@ -75,10 +82,39 @@ func Create(todo Todo) (int,error){
 	return pk,nil
 }
 
+
 // This function will update the table query
 func Update(id int, todo Todo)(int64,error){
-	query := `UPDATE todos SET title=$1, description=$2 WHERE id=$3`
-	res,err := db.Exec(query,todo.Title,todo.Description,id)
+	setClauses := []string{}
+	args := []interface{}{}
+	argPosition := 1
+
+	if todo.Title != nil {
+		setClauses = append(setClauses, fmt.Sprintf("title=$%d", argPosition))
+		args = append(args, todo.Title)
+		argPosition++
+	}
+	if todo.Description != nil {
+		setClauses = append(setClauses, fmt.Sprintf("description=$%d", argPosition))
+		args = append(args, todo.Description)
+		argPosition++
+	}
+
+	if todo.IsDeleted != nil{
+		setClauses = append(setClauses, fmt.Sprintf("is_deleted=$%d", argPosition))
+		args = append(args, todo.IsDeleted)
+		argPosition++
+	}
+
+	if len(setClauses) == 0 {
+		return 0, fmt.Errorf("no fields provided for update")
+	}
+
+	query := fmt.Sprintf("UPDATE todo SET %s WHERE id=$%d",strings.Join(setClauses, ", "), argPosition)
+
+	args = append(args, id)
+
+	res, err := db.Exec(query, args...)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute update query: %w", err)
 	}
@@ -90,10 +126,9 @@ func Update(id int, todo Todo)(int64,error){
 }
 
 
-
 // This function will delete the query
 func Delete(id int)(int64,error){
-	query := `DELETE FROM todos WHERE id=$1`
+	query := `UPDATE todo SET is_deleted = true WHERE id=$1`
 	res,err := db.Exec(query,id)
 	if err != nil {
 		return 0, fmt.Errorf("failed to execute delete query: %w", err)
@@ -105,9 +140,10 @@ func Delete(id int)(int64,error){
 	return rowsAffected,nil
 }
 
+
 // This function will print all the queries
 func Get()([]Todo,error){
-	query:= "SELECT id,title,description FROM todos ORDER BY id"
+	query:= "SELECT id,title,description,is_deleted FROM todo WHERE is_deleted = false ORDER BY id"
 	rows, err := db.Query(query)
 	var list []Todo
 	if err!=nil{
@@ -117,11 +153,12 @@ func Get()([]Todo,error){
 		var id int
 		var title string
 		var description string
-		if err := rows.Scan(&id, &title,&description); err != nil {
+		var is_deleted bool
+		if err := rows.Scan(&id, &title,&description,&is_deleted); err != nil {
 			return list,fmt.Errorf("failed to get the rows: %w",err)
 		}
 		// fmt.Println(id)
-		todo:= Todo{Id:id,Title:title,Description:description}
+		todo:= Todo{Id:&id,Title:&title,Description:&description,IsDeleted: &is_deleted}
 		list = append(list,todo)
 	}
 	return list,nil
