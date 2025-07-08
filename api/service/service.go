@@ -1,99 +1,127 @@
 package service
+
 import (
 	"bytes"
-	"database/sql"
 	"encoding/json"
-	"fmt"
 	"io"
-	"log"
 	"main/api/service/repo"
 	"net/http"
 	"strconv"
 	"strings"
+	"github.com/gorilla/mux"
 	_ "github.com/lib/pq"
 )
 
-var DB *sql.DB
 
-func CreateEntry(w http.ResponseWriter,r *http.Request){
+func Create(w http.ResponseWriter,r *http.Request){
 	body,err:= io.ReadAll(r.Body)
-	checkErr(err)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 	todo:=repo.Todo{}
 	err = json.NewDecoder(bytes.NewBuffer(body)).Decode(&todo)
-	checkErr(err)
-	repo.InsertIntoTable(todo)
+	if err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+	_,err=repo.Create(todo)
+	if err!=nil{
+		http.Error(w,"Unable to query from the database",http.StatusInternalServerError)
+		return
+	}
 	// fmt.Println(pk)
+	w.WriteHeader(http.StatusCreated)
 	w.Write([]byte("Entry Posted"))
 }
 
-// This function is used to create a DB table
-func createTable(db *sql.DB){
-	query := `CREATE TABLE IF NOT EXISTS todos (
-		id SERIAL PRIMARY KEY,
-		title VARCHAR(255) NOT NULL,
-		description VARCHAR(255)
-	)`
-	_,err :=db.Exec(query) 
-	checkErr(err)
-	fmt.Println("Table successfully created")
-}
 
 // This function will fetch all the entries from the table
-func GetEntries(w http.ResponseWriter,r *http.Request){
-	list:=repo.PrintTable()
-	w.Header().Set("Content-Type","application/json")
-	err := json.NewEncoder(w).Encode(list)
+func Get(w http.ResponseWriter,r *http.Request){
+	list,err:=repo.Get()
 	if err!=nil{
-		fmt.Println("error")
+		if strings.Contains(err.Error(),"failed to execute the query"){
+			http.Error(w,"Failed the execute the query",http.StatusInternalServerError)
+		}else if strings.Contains(err.Error(),"failed to get the rows"){
+			http.Error(w,"Failed to get the rows",http.StatusInternalServerError)
+		}
+		return
+	}
+	w.Header().Set("Content-Type","application/json")
+	err = json.NewEncoder(w).Encode(list)
+	if err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
 }
 
 // This function will update the row
-func UpdateEntries(w http.ResponseWriter,r *http.Request){
-	body,_ := io.ReadAll(r.Body)
+func Update(w http.ResponseWriter,r *http.Request){
+	body,err:= io.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
 	todo:= repo.Todo{}
-	err := json.NewDecoder(bytes.NewReader(body)).Decode(&todo)
+	err = json.NewDecoder(bytes.NewReader(body)).Decode(&todo)
+	if err != nil {
+		http.Error(w, "Invalid JSON format", http.StatusBadRequest)
+		return
+	}
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	id,err:= strconv.Atoi(idStr)
 	if err!=nil{
-		fmt.Println("error")
+		http.Error(w,"The given id is not an integer",http.StatusBadRequest)
 		return
 	}
-	path:= r.URL.Path
-	parts:= strings.Split(path,"/")
-	if len(parts)<3{
-		fmt.Println("error! id not given")
+	rowsAffected,err:=repo.Update(id,todo)
+	if err!=nil{
+		if strings.Contains(err.Error(), "failed to execute update query") {
+			http.Error(w, "DB query execution failed", http.StatusInternalServerError)
+			
+		}else if strings.Contains(err.Error(), "failed to get the affected rows"){
+			http.Error(w, "Failed to get the affected rows", http.StatusInternalServerError)
+		}
 		return
 	}
-	id,_:= strconv.Atoi(parts[2])
-	rowsAffected:=repo.UpdateTable(id,todo)
 	if rowsAffected == 0 {
-		w.Write([]byte("Entry not found"))
+		http.Error(w, "Entry not found",404)
 	} else {
 		w.Write([]byte("Entry Updated"))
 	}
-	
+
 }
 
 // This function will delete the row 
-func DeleteEntries(w http.ResponseWriter,r *http.Request){
-	path:= r.URL.Path
-	parts:= strings.Split(path,"/")
-	if len(parts)<3{
-		fmt.Println("error! id not given")
+func Delete(w http.ResponseWriter,r *http.Request){
+	vars := mux.Vars(r)
+	idStr := vars["id"]
+	id,err:= strconv.Atoi(idStr)
+	if err!=nil{
+		http.Error(w,"The given id is not an integer",http.StatusBadRequest)
 		return
 	}
-	id,_:= strconv.Atoi(parts[2])
-	rowsAffected:=repo.DeleteEntry(id)
+	rowsAffected,err:=repo.Delete(id)
+	if err!=nil{
+		if strings.Contains(err.Error(),"failed to execute update query"){
+			http.Error(w,"Failed to execute delete query",http.StatusInternalServerError)
+		}else if strings.Contains(err.Error(),"failed to get rows affected"){
+			http.Error(w,"Failed to get rows affected",http.StatusInternalServerError)
+		}
+		return
+	}
 	if rowsAffected == 0 {
-		w.Write([]byte("Entry not found"))
+		http.Error(w, "Entry not found",404)
 	} else {
+		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Entry Deleted"))
 	}
 	
 }
 
-func checkErr(err error){
-	if err!=nil{
-		log.Fatal(err)
-	}
-}
+// func checkErr(err error){
+// 	if err!=nil{
+// 		log.Fatal(err)
+// 	}
+// }

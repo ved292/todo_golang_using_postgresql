@@ -3,13 +3,18 @@ package api
 import (
 	"net/http"
 	"main/api/service"
+	"github.com/gorilla/mux"
 )
 func Route(){
-	http.HandleFunc("/post",service.CreateEntry)
+	r:= mux.NewRouter()
 
-	http.HandleFunc("/",service.GetEntries)
+	r.HandleFunc("/",service.Create).Methods("POST")
+	
+	r.HandleFunc("/",service.Get).Methods("GET")
 
-	http.HandleFunc("/put/",service.UpdateEntries)
+	r.HandleFunc("/{id}",service.Update).Methods("PUT")
 
-	http.HandleFunc("/delete/",service.DeleteEntries)
+	r.HandleFunc("/{id}",service.Delete).Methods("DELETE")
+
+	http.Handle("/",r)
 }
