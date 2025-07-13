@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 	_ "github.com/lib/pq"
@@ -21,7 +22,7 @@ type Todo struct{
 
 
 const (
-	host = "localhost"
+	host = "db"
 	port = 5432
 	user = "postgres"
 	dbname = "todos"
@@ -37,11 +38,16 @@ func ConnToDb()(error){
 	// connStr:= os.Getenv("CONNECTION_STRING")
 	password:= os.Getenv("PASSWORD")
 	connStr:= fmt.Sprintf("host= %s port= %d user = %s password = %s dbname = %s sslmode=disable",host,port,user,password,dbname)
-	db,err = sql.Open("postgres",connStr)
-	if err!=nil{
-		return fmt.Errorf("failed to connect to Database: %w", err)
+	for range 5 {
+		db, err = sql.Open("postgres", connStr)
+		if err == nil && db.Ping() == nil {
+			break
+		}
+		log.Println("Waiting for database to be ready...")
+		time.Sleep(3 * time.Second)
 	}
-	// createTable(db)
+	createTable(db)
+	//createIndex()
 	if err = db.Ping(); err != nil {
 		return fmt.Errorf("failed to do connection with database: %w", err)
 	}
@@ -54,6 +60,12 @@ func CloseDB() {
 	}
 }
 
+func createIndex(){
+	query := `CREATE INDEX idx_active_todos ON todo(id, title, description) WHERE is_deleted = false`
+	_,err := db.Exec(query)
+	checkErr(err)
+	fmt.Println("Index successfully created")
+}
 
 // This function is used to create a DB table
 func createTable(db *sql.DB){
@@ -86,7 +98,7 @@ func Create(todo Todo) (int,error){
 // This function will update the table query
 func Update(id int, todo Todo)(int64,error){
 	setClauses := []string{}
-	args := []interface{}{}
+	args := []any{}
 	argPosition := 1
 
 	if todo.Title != nil {
@@ -143,7 +155,7 @@ func Delete(id int)(int64,error){
 
 // This function will print all the queries
 func Get()([]Todo,error){
-	query:= "SELECT id,title,description,is_deleted FROM todo WHERE is_deleted = false ORDER BY id"
+	query:= "SELECT * FROM todo WHERE is_deleted = false ORDER BY id"
 	rows, err := db.Query(query)
 	var list []Todo
 	if err!=nil{
